@@ -1,100 +1,78 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { Page } from '../App';
-import { Camera, Download, Loader2, Trash2 } from 'lucide-react';
+import { Camera, Download, Loader2, Trash2, SlidersHorizontal } from 'lucide-react';
 import { imagesToPDF } from '../utils/pdfUtils';
 import { saveAs } from 'file-saver';
+import { DocumentScanner } from '@uziee/document-scanner';
 
 interface CameraToPDFProps {
   onNavigate: (page: Page) => void;
 }
 
+const applyFilterToFile = async (dataUrl: string, mode: 'normal' | 'cerahkan', index: number): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('Canvas context not found'));
+
+      if (mode === 'cerahkan') {
+        ctx.filter = 'brightness(1.2) contrast(1.1)';
+      } else {
+        ctx.filter = 'none';
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(new File([blob], `scan_${index}.jpg`, { type: 'image/jpeg' }));
+        } else {
+          reject(new Error('Failed to create blob'));
+        }
+      }, 'image/jpeg', 0.9);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = dataUrl;
+  });
+};
+
 const CameraToPDF: React.FC<CameraToPDFProps> = () => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [images, setImages] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scans, setScans] = useState<string[]>([]);
+  const [filterMode, setFilterMode] = useState<'normal' | 'cerahkan'>('normal');
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Try to default to environment (rear) camera
-  const startCamera = async () => {
-    try {
-      setError(null);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      setStream(mediaStream);
-    } catch (err: any) {
-      setError(`Failed to access camera: ${err.message}`);
-    }
+
+  const handleCapture = (images: string[]) => {
+    setScans(prev => [...prev, ...images]);
+    setShowScanner(false);
   };
 
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  };
-
-  useEffect(() => {
-    if (stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Error playing video:", e));
-    }
-    
-    // Clean up camera when stream changes or component unmounts
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [stream]);
-
-  const takePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    // Set canvas dimensions to match video source
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    const context = canvas.getContext('2d');
-    if (context) {
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to JPG
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const timestamp = new Date().getTime();
-          const file = new File([blob], `capture_${timestamp}.jpg`, { type: 'image/jpeg' });
-          const previewUrl = URL.createObjectURL(blob);
-          
-          setImages(prev => [...prev, file]);
-          setPreviews(prev => [...prev, previewUrl]);
-        }
-      }, 'image/jpeg', 0.9);
-    }
+  const handleClose = () => {
+    setShowScanner(false);
   };
 
   const removeImage = (index: number) => {
-    URL.revokeObjectURL(previews[index]);
-    setImages(prev => prev.filter((_, i) => i !== index));
-    setPreviews(prev => prev.filter((_, i) => i !== index));
+    setScans(prev => prev.filter((_, i) => i !== index));
   };
 
   const generatePDF = async () => {
-    if (images.length === 0) return;
+    if (scans.length === 0) return;
     
     setIsProcessing(true);
     setError(null);
     
     try {
-      const pdfBytes = await imagesToPDF(images);
+      // Process images with current filter
+      const filesToProcess = await Promise.all(
+        scans.map((dataUrl, index) => applyFilterToFile(dataUrl, filterMode, index))
+      );
+      
+      const pdfBytes = await imagesToPDF(filesToProcess);
       const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
       saveAs(blob, 'camera-scans.pdf');
     } catch (err: any) {
@@ -104,93 +82,105 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
     }
   };
 
+  // If scanner is active, render it full screen
+  if (showScanner) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'black' }}>
+        <DocumentScanner onCapture={handleCapture} onClose={handleClose} />
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in" style={{ padding: '2rem 0', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Camera to PDF</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>Scan documents with your camera and convert them to a PDF.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>Otomatis scan tepi dokumen dan ubah menjadi PDF.</p>
       </div>
 
       <div className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
-        
-        {/* Camera Viewfinder */}
-        <div style={{ 
-          width: '100%', 
-          maxWidth: '500px', 
-          aspectRatio: '3/4', 
-          background: 'rgba(0,0,0,0.5)', 
-          borderRadius: '12px', 
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative'
-        }}>
-          {stream ? (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-          ) : (
-            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
-              <Camera size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-              <p>Camera is currently off</p>
-            </div>
-          )}
-          
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
-        </div>
-
         {error && (
           <div style={{ color: 'var(--error-color)', background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '8px', width: '100%' }}>
             {error}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {!stream ? (
-            <button className="btn-primary" onClick={startCamera}>
-              <Camera size={20} />
-              Start Camera
-            </button>
-          ) : (
-            <>
-              <button className="btn-primary" onClick={takePhoto} style={{ background: 'linear-gradient(135deg, #ec4899, #f43f5e)' }}>
-                <Camera size={20} />
-                Capture Photo
-              </button>
-              <button className="btn-secondary" onClick={stopCamera}>
-                Stop Camera
-              </button>
-            </>
-          )}
+        <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
+          <Camera size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+          <p>Mulai pemindaian dokumen cerdas. Arahkan kamera ke kertas dan aplikasi akan secara otomatis mendeteksi serta memotong (crop) tepinya.</p>
         </div>
+
+        <button className="btn-primary" onClick={() => setShowScanner(true)}>
+          <Camera size={20} />
+          Mulai Scanner
+        </button>
       </div>
 
-      {previews.length > 0 && (
+      {scans.length > 0 && (
         <div className="glass-panel animate-fade-in" style={{ marginTop: '2rem' }}>
-          <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>Captured Pages ({previews.length})</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem' }}>
+            <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center' }}>
+              <span>Dokumen Tersimpan ({scans.length})</span>
+            </h3>
             
-            <button 
-              className="btn-primary" 
-              onClick={generatePDF} 
-              disabled={isProcessing}
-            >
-              {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-              {isProcessing ? 'Processing...' : 'Download PDF'}
-            </button>
-          </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              {/* Filter Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '8px' }}>
+                <div style={{ padding: '0 0.5rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <SlidersHorizontal size={16} /> Filter:
+                </div>
+                <button 
+                  onClick={() => setFilterMode('normal')}
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    borderRadius: '6px', 
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: filterMode === 'normal' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: filterMode === 'normal' ? '#fff' : 'var(--text-secondary)'
+                  }}
+                >
+                  Normal
+                </button>
+                <button 
+                  onClick={() => setFilterMode('cerahkan')}
+                  style={{ 
+                    padding: '0.5rem 1rem', 
+                    borderRadius: '6px', 
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: filterMode === 'cerahkan' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: filterMode === 'cerahkan' ? '#fff' : 'var(--text-secondary)'
+                  }}
+                >
+                  Cerahkan
+                </button>
+              </div>
+
+              <button 
+                className="btn-primary" 
+                onClick={generatePDF} 
+                disabled={isProcessing}
+              >
+                {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+                {isProcessing ? 'Memproses...' : 'Download PDF'}
+              </button>
+            </div>
+          </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '1rem' }}>
-            {previews.map((preview, index) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
+            {scans.map((scan, index) => (
               <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', aspectRatio: '3/4', background: 'rgba(0,0,0,0.2)' }}>
                 <img 
-                  src={preview} 
-                  alt={`Capture ${index + 1}`} 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  src={scan} 
+                  alt={`Scan ${index + 1}`} 
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    objectFit: 'cover',
+                    filter: filterMode === 'cerahkan' ? 'brightness(1.2) contrast(1.1)' : 'none',
+                    transition: 'filter 0.3s ease'
+                  }}
                 />
                 <button 
                   className="btn-icon" 

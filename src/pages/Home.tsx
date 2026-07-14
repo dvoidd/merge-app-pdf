@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Page } from '../App';
-import { FilePlus, Image, Images } from 'lucide-react';
+import { FilePlus, Image as ImageIcon, Images, Camera } from 'lucide-react';
 
 interface HomeProps {
   onNavigate: (page: Page) => void;
@@ -44,7 +44,7 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
         >
           <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem' }}>
-            <Image size={48} color="var(--success-color)" />
+            <ImageIcon size={48} color="var(--success-color)" />
           </div>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Image to PDF</h2>
           <p style={{ color: 'var(--text-secondary)' }}>Convert your images (JPG, PNG) into a polished PDF file.</p>
@@ -63,6 +63,21 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>PDF to Image</h2>
           <p style={{ color: 'var(--text-secondary)' }}>Extract pages from your PDF and save them as high-quality images.</p>
+        </div>
+
+        {/* Camera to PDF Card */}
+        <div 
+          className="glass-panel" 
+          style={{ cursor: 'pointer', transition: 'transform 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
+          onClick={() => onNavigate('camera-to-pdf')}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-5px)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
+        >
+          <div style={{ background: 'rgba(236, 72, 153, 0.1)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem' }}>
+            <Camera size={48} color="#ec4899" />
+          </div>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Camera to PDF</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>Snap photos directly from your camera and convert them to PDF.</p>
         </div>
 
       </div>

@@ -4,7 +4,7 @@ import { Download, Loader2, Trash2, SlidersHorizontal, Maximize } from 'lucide-r
 import { imagesToPDF } from '../utils/pdfUtils';
 import { saveAs } from 'file-saver';
 // @ts-ignore
-import DocumentScanner from '@uziee/document-scanner';
+import { DocumentScanner } from '@uziee/document-scanner';
 
 interface CameraToPDFProps {
   onNavigate: (page: Page) => void;

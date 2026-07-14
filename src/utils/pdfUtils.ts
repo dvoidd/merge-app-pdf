@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
 
 // Use local worker via Vite URL import to avoid CDN and CORS issues
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -104,4 +105,60 @@ export const extractImagesFromPDF = async (file: File): Promise<PDFImageExtract[
   }
   
   return extractedImages;
+};
+
+export const extractTextFromPDF = async (file: File): Promise<Blob> => {
+  const arrayBuffer = await file.arrayBuffer();
+  
+  // Load PDF document using pdf.js
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
+  const numPages = pdf.numPages;
+  
+  const docParagraphs = [];
+  
+  // Extract text from each page
+  for (let i = 1; i <= numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    
+    // Group items into paragraphs based on Y position loosely
+    let currentY = -1;
+    let currentLine = '';
+    
+    textContent.items.forEach((item: any) => {
+      // If the Y position changes significantly, treat it as a new line
+      if (currentY !== -1 && Math.abs(currentY - item.transform[5]) > 5) {
+        docParagraphs.push(
+          new Paragraph({
+            children: [new TextRun(currentLine)],
+          })
+        );
+        currentLine = '';
+      }
+      currentLine += item.str + ' ';
+      currentY = item.transform[5];
+    });
+    
+    // Add the last line of the page
+    if (currentLine.trim()) {
+      docParagraphs.push(
+        new Paragraph({
+          children: [new TextRun(currentLine)],
+        })
+      );
+    }
+    
+    // Add page break logic if needed, but for now just add empty paragraph
+    docParagraphs.push(new Paragraph({ text: "" }));
+  }
+  
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: docParagraphs,
+    }],
+  });
+  
+  return await Packer.toBlob(doc);
 };

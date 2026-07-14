@@ -26,10 +26,6 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }
       });
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
       setStream(mediaStream);
     } catch (err: any) {
       setError(`Failed to access camera: ${err.message}`);
@@ -44,9 +40,16 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
   };
 
   useEffect(() => {
-    // Clean up camera on unmount
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(e => console.error("Error playing video:", e));
+    }
+    
+    // Clean up camera when stream changes or component unmounts
     return () => {
-      stopCamera();
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
     };
   }, [stream]);
 

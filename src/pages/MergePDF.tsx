@@ -14,7 +14,9 @@ const MergePDF: React.FC<MergePDFProps> = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFilesSelected = (newFiles: File[]) => {
-    const pdfs = newFiles.filter(f => f.type === 'application/pdf');
+    const pdfs = newFiles
+      .filter(f => f.type === 'application/pdf')
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     setFiles(prev => [...prev, ...pdfs]);
   };
 

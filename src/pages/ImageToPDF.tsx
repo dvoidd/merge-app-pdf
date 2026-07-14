@@ -14,7 +14,9 @@ const ImageToPDF: React.FC<ImageToPDFProps> = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFilesSelected = (newFiles: File[]) => {
-    const images = newFiles.filter(f => f.type.startsWith('image/'));
+    const images = newFiles
+      .filter(f => f.type.startsWith('image/'))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
     setFiles(prev => [...prev, ...images]);
   };
 

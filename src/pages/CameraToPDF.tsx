@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import type { Page } from '../App';
-import { Camera, Download, Loader2, Trash2, SlidersHorizontal, Maximize } from 'lucide-react';
+import { Download, Loader2, Trash2, SlidersHorizontal, Maximize } from 'lucide-react';
 import { imagesToPDF } from '../utils/pdfUtils';
 import { saveAs } from 'file-saver';
+// @ts-ignore
 import DocumentScanner from '@uziee/document-scanner';
 
 interface CameraToPDFProps {

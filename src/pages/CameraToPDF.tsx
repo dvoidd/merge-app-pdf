@@ -65,14 +65,24 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const MAX_WIDTH = 1200;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > MAX_WIDTH) {
+        const ratio = MAX_WIDTH / width;
+        width = MAX_WIDTH;
+        height = height * ratio;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
       
       const context = canvas.getContext('2d');
       if (context) {
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        // Using 0.75 quality reduces file size significantly while maintaining good visual quality
-        const imageUrl = canvas.toDataURL('image/jpeg', 0.75);
+        // Using 0.6 quality + resized resolution reduces file size drastically
+        const imageUrl = canvas.toDataURL('image/jpeg', 0.6);
         
         const newImage: CapturedImage = {
           id: Math.random().toString(36).substr(2, 9),
@@ -107,8 +117,8 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
             ctx.filter = 'brightness(120%) contrast(110%)';
           }
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          // Using 0.75 quality for the final processed image before PDF conversion
-          resolve(canvas.toDataURL('image/jpeg', 0.75));
+          // Using 0.6 quality for the final processed image before PDF conversion
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
         } else {
           resolve(dataUrl);
         }

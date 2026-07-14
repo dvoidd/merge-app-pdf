@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Page } from '../App';
-import { FilePlus, Image as ImageIcon, Images, Camera, FileText } from 'lucide-react';
+import { FilePlus, Image as ImageIcon, Images, Camera } from 'lucide-react';
 
 interface HomeProps {
   onNavigate: (page: Page) => void;
@@ -80,20 +80,6 @@ const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           <p style={{ color: 'var(--text-secondary)' }}>Snap photos directly from your camera and convert them to PDF.</p>
         </div>
 
-        {/* PDF to Word Card */}
-        <div 
-          className="glass-panel" 
-          style={{ cursor: 'pointer', transition: 'transform 0.3s', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}
-          onClick={() => onNavigate('pdf-to-word')}
-          onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-5px)')}
-          onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-        >
-          <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.5rem' }}>
-            <FileText size={48} color="#fbbf24" />
-          </div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>PDF to Word</h2>
-          <p style={{ color: 'var(--text-secondary)' }}>Extract text from your PDF into an editable Word document.</p>
-        </div>
       </div>
     </div>
   );

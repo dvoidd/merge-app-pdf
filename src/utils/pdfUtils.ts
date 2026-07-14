@@ -122,35 +122,72 @@ export const extractTextFromPDF = async (file: File): Promise<Blob> => {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
     
-    // Group items into paragraphs based on Y position loosely
-    let currentY = -1;
-    let currentLine = '';
+    // Group items into lines based on Y position (bottom coordinate in PDF)
+    const linesMap = new Map<number, any[]>();
     
     textContent.items.forEach((item: any) => {
-      // If the Y position changes significantly, treat it as a new line
-      if (currentY !== -1 && Math.abs(currentY - item.transform[5]) > 5) {
-        docParagraphs.push(
-          new Paragraph({
-            children: [new TextRun(currentLine)],
-          })
-        );
-        currentLine = '';
+      // transform[5] is the Y coordinate. Group within a 5-point tolerance.
+      const y = Math.round(item.transform[5] / 5) * 5;
+      if (!linesMap.has(y)) {
+        linesMap.set(y, []);
       }
-      currentLine += item.str + ' ';
-      currentY = item.transform[5];
+      linesMap.get(y)!.push(item);
     });
-    
-    // Add the last line of the page
-    if (currentLine.trim()) {
+
+    // Sort lines by Y coordinate descending (PDF coordinates start from bottom left)
+    const sortedY = Array.from(linesMap.keys()).sort((a, b) => b - a);
+
+    sortedY.forEach((y) => {
+      const lineItems = linesMap.get(y)!;
+      // Sort items within the line by X coordinate
+      lineItems.sort((a, b) => a.transform[4] - b.transform[4]);
+
+      const textRuns: any[] = [];
+      let lastX = 0;
+
+      lineItems.forEach((item, index) => {
+        const x = item.transform[4];
+        const fontSize = Math.abs(item.transform[0]);
+        const fontName = item.fontName ? item.fontName.toLowerCase() : '';
+        const isBold = fontName.includes('bold');
+        const isItalic = fontName.includes('italic');
+
+        // Estimate character width (heuristic: fontSize * 0.5)
+        const charWidth = fontSize * 0.5;
+
+        if (index > 0) {
+          const gap = x - lastX;
+          // If the gap is larger than 2 characters, insert spaces to simulate layout
+          if (gap > charWidth * 2) {
+            const spacesCount = Math.round(gap / charWidth);
+            textRuns.push(new TextRun({ text: ' '.repeat(spacesCount) }));
+          } else if (gap > charWidth * 0.5) {
+            // normal space
+            textRuns.push(new TextRun({ text: ' ' }));
+          }
+        }
+
+        textRuns.push(new TextRun({
+          text: item.str,
+          bold: isBold,
+          italics: isItalic,
+          size: fontSize * 2, // docx uses half-points
+        }));
+
+        lastX = x + (item.width || (item.str.length * charWidth));
+      });
+
       docParagraphs.push(
         new Paragraph({
-          children: [new TextRun(currentLine)],
+          children: textRuns,
         })
       );
-    }
+    });
     
     // Add page break logic if needed, but for now just add empty paragraph
-    docParagraphs.push(new Paragraph({ text: "" }));
+    if (i < numPages) {
+      docParagraphs.push(new Paragraph({ text: "" }));
+    }
   }
   
   const doc = new Document({

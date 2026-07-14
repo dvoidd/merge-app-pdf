@@ -5,9 +5,8 @@ import MergePDF from './pages/MergePDF';
 import ImageToPDF from './pages/ImageToPDF';
 import PDFToImage from './pages/PDFToImage';
 import CameraToPDF from './pages/CameraToPDF';
-import PDFToWord from './pages/PDFToWord';
 
-export type Page = 'home' | 'merge' | 'image-to-pdf' | 'pdf-to-image' | 'camera-to-pdf' | 'pdf-to-word';
+export type Page = 'home' | 'merge' | 'image-to-pdf' | 'pdf-to-image' | 'camera-to-pdf';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -24,8 +23,6 @@ function App() {
         return <PDFToImage onNavigate={setCurrentPage} />;
       case 'camera-to-pdf':
         return <CameraToPDF onNavigate={setCurrentPage} />;
-      case 'pdf-to-word':
-        return <PDFToWord onNavigate={setCurrentPage} />;
       default:
         return <Home onNavigate={setCurrentPage} />;
     }

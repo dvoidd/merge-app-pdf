@@ -1,54 +1,36 @@
 import React, { useState } from 'react';
 import type { Page } from '../App';
-import { Camera, Download, Loader2, Trash2, SlidersHorizontal } from 'lucide-react';
+import { Camera, Download, Loader2, Trash2, SlidersHorizontal, Maximize } from 'lucide-react';
 import { imagesToPDF } from '../utils/pdfUtils';
 import { saveAs } from 'file-saver';
-import { DocumentScanner } from '@uziee/document-scanner';
+import DocumentScanner from '@uziee/document-scanner';
 
 interface CameraToPDFProps {
   onNavigate: (page: Page) => void;
 }
 
-const applyFilterToFile = async (dataUrl: string, mode: 'normal' | 'cerahkan', index: number): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject(new Error('Canvas context not found'));
+interface CapturedImage {
+  id: string;
+  url: string;
+}
 
-      if (mode === 'cerahkan') {
-        ctx.filter = 'brightness(1.2) contrast(1.1)';
-      } else {
-        ctx.filter = 'none';
-      }
-      
-      ctx.drawImage(img, 0, 0);
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(new File([blob], `scan_${index}.jpg`, { type: 'image/jpeg' }));
-        } else {
-          reject(new Error('Failed to create blob'));
-        }
-      }, 'image/jpeg', 0.9);
-    };
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = dataUrl;
-  });
-};
+type FilterType = 'normal' | 'cerahkan';
 
 const CameraToPDF: React.FC<CameraToPDFProps> = () => {
   const [showScanner, setShowScanner] = useState(false);
-  const [scans, setScans] = useState<string[]>([]);
-  const [filterMode, setFilterMode] = useState<'normal' | 'cerahkan'>('normal');
-  
+  const [images, setImages] = useState<CapturedImage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('cerahkan'); // Default ke cerah karena ini scan dokumen
 
-  const handleCapture = (images: string[]) => {
-    setScans(prev => [...prev, ...images]);
+  const handleCapture = (scannedImages: string[]) => {
+    // scannedImages is an array of base64 strings
+    if (scannedImages && scannedImages.length > 0) {
+      const newImages = scannedImages.map(url => ({
+        id: Math.random().toString(36).substr(2, 9),
+        url
+      }));
+      setImages(prev => [...prev, ...newImages]);
+    }
     setShowScanner(false);
   };
 
@@ -56,145 +38,144 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
     setShowScanner(false);
   };
 
-  const removeImage = (index: number) => {
-    setScans(prev => prev.filter((_, i) => i !== index));
+  const removeImage = (id: string) => {
+    setImages(images.filter(img => img.id !== id));
   };
 
-  const generatePDF = async () => {
-    if (scans.length === 0) return;
-    
+  // Canvas processing for filters before generating PDF
+  const processImageWithFilter = (dataUrl: string, filter: FilterType): Promise<string> => {
+    return new Promise((resolve) => {
+      if (filter === 'normal') {
+        resolve(dataUrl);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        
+        if (ctx) {
+          if (filter === 'cerahkan') {
+            ctx.filter = 'brightness(120%) contrast(110%)';
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.9));
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  const handleCreatePDF = async () => {
+    if (images.length === 0) return;
+
     setIsProcessing(true);
-    setError(null);
-    
     try {
-      // Process images with current filter
-      const filesToProcess = await Promise.all(
-        scans.map((dataUrl, index) => applyFilterToFile(dataUrl, filterMode, index))
+      const processedFiles = await Promise.all(
+        images.map(async (img, index) => {
+          const filteredDataUrl = await processImageWithFilter(img.url, activeFilter);
+          const res = await fetch(filteredDataUrl);
+          const blob = await res.blob();
+          return new File([blob], `scan-${index + 1}.jpg`, { type: 'image/jpeg' });
+        })
       );
-      
-      const pdfBytes = await imagesToPDF(filesToProcess);
-      const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
-      saveAs(blob, 'camera-scans.pdf');
-    } catch (err: any) {
-      setError(err.message || 'Failed to generate PDF');
+
+      const pdfBytes = await imagesToPDF(processedFiles);
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' });
+      saveAs(blob, `Scanned_Document_${new Date().getTime()}.pdf`);
+    } catch (error) {
+      console.error('Error creating PDF:', error);
+      alert('Failed to create PDF. Please try again.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // If scanner is active, render it full screen
   if (showScanner) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, background: 'black' }}>
-        <DocumentScanner onCapture={handleCapture} onClose={handleClose} />
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#000' }}>
+        <DocumentScanner 
+          onCapture={handleCapture} 
+          onClose={handleClose} 
+        />
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in" style={{ padding: '2rem 0', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Camera to PDF</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>Otomatis scan tepi dokumen dan ubah menjadi PDF.</p>
+    <div className="animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto', paddingTop: '2rem' }}>
+      <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
+        <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>Smart Scanner to PDF</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>Scan documents automatically using your camera.</p>
       </div>
 
-      <div className="glass-panel" style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center' }}>
-        {error && (
-          <div style={{ color: 'var(--error-color)', background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '8px', width: '100%' }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '2rem' }}>
-          <Camera size={48} style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-          <p>Mulai pemindaian dokumen cerdas. Arahkan kamera ke kertas dan aplikasi akan secara otomatis mendeteksi serta memotong (crop) tepinya.</p>
-        </div>
-
-        <button className="btn-primary" onClick={() => setShowScanner(true)}>
-          <Camera size={20} />
-          Mulai Scanner
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+        <button className="btn-primary" onClick={() => setShowScanner(true)} style={{ padding: '1rem 2rem', fontSize: '1.2rem' }}>
+          <Maximize style={{ marginRight: '0.5rem' }} /> Buka Scanner Otomatis
         </button>
       </div>
 
-      {scans.length > 0 && (
-        <div className="glass-panel animate-fade-in" style={{ marginTop: '2rem' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', gap: '1rem' }}>
-            <h3 style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center' }}>
-              <span>Dokumen Tersimpan ({scans.length})</span>
-            </h3>
+      {images.length > 0 && (
+        <div className="glass-panel" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.2rem' }}>Scanned Images ({images.length})</h3>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-              {/* Filter Toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '8px' }}>
-                <div style={{ padding: '0 0.5rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <SlidersHorizontal size={16} /> Filter:
-                </div>
-                <button 
-                  onClick={() => setFilterMode('normal')}
-                  style={{ 
-                    padding: '0.5rem 1rem', 
-                    borderRadius: '6px', 
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: filterMode === 'normal' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                    color: filterMode === 'normal' ? '#fff' : 'var(--text-secondary)'
-                  }}
-                >
-                  Normal
-                </button>
-                <button 
-                  onClick={() => setFilterMode('cerahkan')}
-                  style={{ 
-                    padding: '0.5rem 1rem', 
-                    borderRadius: '6px', 
-                    border: 'none',
-                    cursor: 'pointer',
-                    background: filterMode === 'cerahkan' ? 'rgba(255,255,255,0.15)' : 'transparent',
-                    color: filterMode === 'cerahkan' ? '#fff' : 'var(--text-secondary)'
-                  }}
-                >
-                  Cerahkan
-                </button>
-              </div>
-
-              <button 
-                className="btn-primary" 
-                onClick={generatePDF} 
-                disabled={isProcessing}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--background-color)', padding: '0.5rem', borderRadius: '8px' }}>
+              <SlidersHorizontal size={16} color="var(--text-secondary)" />
+              <select 
+                value={activeFilter} 
+                onChange={(e) => setActiveFilter(e.target.value as FilterType)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer' }}
               >
-                {isProcessing ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
-                {isProcessing ? 'Memproses...' : 'Download PDF'}
-              </button>
+                <option value="normal">Original</option>
+                <option value="cerahkan">Cerahkan Dokumen</option>
+              </select>
             </div>
           </div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
-            {scans.map((scan, index) => (
-              <div key={index} style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', aspectRatio: '3/4', background: 'rgba(0,0,0,0.2)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+            {images.map((img) => (
+              <div key={img.id} style={{ position: 'relative', aspectRatio: '3/4', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
                 <img 
-                  src={scan} 
-                  alt={`Scan ${index + 1}`} 
+                  src={img.url} 
+                  alt="Scanned" 
                   style={{ 
-                    width: '100%', 
-                    height: '100%', 
-                    objectFit: 'cover',
-                    filter: filterMode === 'cerahkan' ? 'brightness(1.2) contrast(1.1)' : 'none',
-                    transition: 'filter 0.3s ease'
-                  }}
+                    width: '100%', height: '100%', objectFit: 'cover',
+                    filter: activeFilter === 'cerahkan' ? 'brightness(120%) contrast(110%)' : 'none'
+                  }} 
                 />
-                <button 
-                  className="btn-icon" 
-                  onClick={() => removeImage(index)}
-                  style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', width: '2rem', height: '2rem', background: 'rgba(0,0,0,0.5)', border: 'none' }}
+                <button
+                  onClick={() => removeImage(img.id)}
+                  style={{
+                    position: 'absolute', top: '0.5rem', right: '0.5rem',
+                    background: 'rgba(239, 68, 68, 0.9)', color: 'white',
+                    border: 'none', borderRadius: '50%', padding: '0.5rem',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
                 >
                   <Trash2 size={16} />
                 </button>
-                <div style={{ position: 'absolute', bottom: '0.5rem', left: '0.5rem', background: 'rgba(0,0,0,0.7)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>
-                  {index + 1}
-                </div>
               </div>
             ))}
           </div>
+
+          <button
+            className="btn-primary"
+            style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+            onClick={handleCreatePDF}
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <><Loader2 className="animate-spin" style={{ marginRight: '0.5rem' }} /> Processing...</>
+            ) : (
+              <><Download style={{ marginRight: '0.5rem' }} /> Download PDF</>
+            )}
+          </button>
         </div>
       )}
     </div>

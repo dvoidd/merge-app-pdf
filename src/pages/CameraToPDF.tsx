@@ -166,7 +166,7 @@ const CameraToPDF: React.FC<CameraToPDFProps> = () => {
                   ref={videoRef}
                   autoPlay
                   playsInline
-                  style={{ width: '100%', display: 'block', transform: 'scaleX(-1)' }}
+                  style={{ width: '100%', display: 'block' }}
                 />
               </div>
               

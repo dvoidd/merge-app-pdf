@@ -1,9 +1,9 @@
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
-// Set up pdf.js worker using unpkg/cdnjs to avoid Vite bundling issues with the worker
-// The version should match the installed pdfjs-dist version, but we can dynamically get it or hardcode a stable one
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use local worker via Vite URL import to avoid CDN and CORS issues
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 export const mergePDFs = async (files: File[]): Promise<Uint8Array> => {
   const mergedPdf = await PDFDocument.create();
